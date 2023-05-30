@@ -75,7 +75,7 @@ float Kd = 10;
 
 // todo 05/29
 float rollr_Kp = 0.2; 
-float rollr_Ki = 0.0018; // ~0.0019
+float rollr_Ki = 0.0025; // ~0.0019
 float rollr_Kd = 0.05;
 
 int core0a_free_stack = 0;
@@ -130,10 +130,10 @@ void loop() {
 
   // 自動昇降機構の制御
   if (auto_updwn_cmd == 1) {
-    trgt_angle = 31.5;
+    trgt_angle = 33.5;
     auto_updwn_flag = !auto_updwn_flag;
   } else if (auto_updwn_cmd == 2) {
-    trgt_angle = 30.5;
+    trgt_angle = 40.0; // 38
     auto_updwn_flag = !auto_updwn_flag;
   } else if (auto_updwn_cmd == 3) {
     trgt_angle = 0;
@@ -146,7 +146,7 @@ void loop() {
   if (auto_updwn_flag == true) {
     float error_angle = trgt_angle - updwn_angle;
     // 差が1deg以下の時は制御しない
-    if (abs(error_angle) < 1) {
+    if (abs(error_angle) < 0.3) {
       updwn_cmd = 0;
       auto_updwn_flag = false;
     } else {
@@ -169,16 +169,16 @@ void loop() {
   }
 
   if (rollr_cmd == 1) {
-    rollr_trgt = 160 + rollr_spd_cmd * 5; // 32-33deg
+    rollr_trgt = 145 + rollr_spd_cmd * 5; // 32-33deg
   } else if (rollr_cmd == 2) {
-    rollr_trgt = 225 + rollr_spd_cmd * 5; // 31deg
+    rollr_trgt = 205 + rollr_spd_cmd * 5; // 38deg
   } else if (rollr_cmd == 3) {
-    rollr_trgt = 0 + rollr_spd_cmd * 5;
+    rollr_trgt = 263 + rollr_spd_cmd * 5;
   } else {
     rollr_trgt = 0;
   }
 
-  rollr_trgt = (rollr_trgt > 250) ? 250 : rollr_trgt;
+  rollr_trgt = (rollr_trgt > 300) ? 300 : rollr_trgt;
 
   error = (updwn_cmd * updwn_trgt) - mrpm[0];
   integral += error * dt;
@@ -196,12 +196,12 @@ void loop() {
     rollr_val[i] = rollr_Kp * rollr_error[i] + rollr_Ki * rollr_integral[i] + rollr_Kd * rollr_derivative[i];
   }
 
-  rollr_val[0] = constrain(rollr_val[0], -80, 80);
-  rollr_val[1] = constrain(rollr_val[1], -80, 80);
+  rollr_val[0] = constrain(rollr_val[0], 0, 80);
+  rollr_val[1] = constrain(rollr_val[1], 0, 80);
 
   m3508_make_data(current_data, send_data);
   m3508_send_data(send_data);
-  mdds30_control_motor(0x00, rollr_val[1], rollr_val[1]);
+  mdds30_control_motor(0x00, rollr_val[1], rollr_val[0]);
 
   delay(1);
   core1m_free_stack = uxTaskGetStackHighWaterMark(NULL);
@@ -211,8 +211,8 @@ void Core0a(void *args) {
   while (1) {
     pcnt_get_counter_value(PCNT_UNIT_2, &count_T);
     pcnt_get_counter_value(PCNT_UNIT_3, &count_B);
-    rollr_rdsc[0] = ((count_T / 5.0) / 512.0) * 1000 * (2 * PI); // 実際のrad/s(上のモーター) 0001
-    rollr_rdsc[1] = ((count_B / 5.0) / 512.0) * 1000 * (2 * PI); // 実際のrad/s(下のモーター) 0001
+    rollr_rdsc[0] = ((count_T / 5.0) / 2048.0) * 1000 * (2 * PI); // 実際のrad/s(上のモーター) 0001
+    rollr_rdsc[1] = ((count_B / 5.0) / 2048.0) * 1000 * (2 * PI); // 実際のrad/s(下のモーター) 0001
     updwn_rdsc = -mrpm[0] * 0.10472; // 実際のrad/s(昇降)
     if (digitalRead(LIMIT_PIN) == HIGH) {
       updwn_angle = 0;
@@ -228,7 +228,7 @@ void Core0a(void *args) {
 
 void Core0b(void *args) {
   while (1) {
-    if (Serial2.available() && Serial2.read() == 0x55) {
+    if (Serial2.available() && Serial2.read() == headerByte) {
       addressByte = Serial2.read();
       commandByte1 = Serial2.read();
       commandByte2 = Serial2.read();
@@ -241,6 +241,7 @@ void Core0b(void *args) {
         rollr_spd_cmd = commandByte3;
         auto_updwn_cmd = commandByte4;
       }
+      Serial.flush();
       // Serial2を空にする
       while (Serial2.available()) {
         Serial2.read();
@@ -280,17 +281,17 @@ void Core1b(void *args) {
     // Serial.print(" | ");
     // Serial.print(digitalRead(LIMIT_PIN));
     // Serial.print(" | ");
-    // Serial.print(updwn_angle);
+    Serial.print(updwn_angle);
     // Serial.print(" | ");
     // Serial.print(updwn_rdsc);
-    // Serial.print(" | ");
+    Serial.print(" | ");
     Serial.print(rollr_rdsc[0]);
-    // Serial.print(", ");
-    // Serial.print(rollr_rdsc[1]);
-    // Serial.print(" | ");
-    // Serial.print(rollr_val[0]);
-    // Serial.print(", ");
-    // Serial.print(rollr_val[1]);
+    Serial.print(", ");
+    Serial.print(rollr_rdsc[1]);
+    Serial.print(" | ");
+    Serial.print(rollr_val[0]);
+    Serial.print(", ");
+    Serial.print(rollr_val[1]);
     // Serial.print(" | ");
     // Serial.print(core0a_free_stack);
     // Serial.print(", ");
