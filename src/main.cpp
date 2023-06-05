@@ -17,7 +17,7 @@
 
 #define LIMIT_PIN 26
 
-uint8_t monitor_mac_addr[] = {0xe0, 0x5a, 0x1b, 0x75, 0x13, 0x24};
+uint8_t monitor_mac_addr[] = {0x24, 0x6f, 0x28, 0x8f, 0x43, 0x5c};
 
 TaskHandle_t thp[2];
 
@@ -136,7 +136,7 @@ void loop() {
     trgt_angle = 40.0; // 38
     auto_updwn_flag = !auto_updwn_flag;
   } else if (auto_updwn_cmd == 3) {
-    trgt_angle = 0;
+    trgt_angle = 40.0;
     auto_updwn_flag = !auto_updwn_flag;
   } else if (auto_updwn_cmd == 4) {
     trgt_angle = 0;
@@ -146,7 +146,10 @@ void loop() {
   if (auto_updwn_flag == true) {
     float error_angle = trgt_angle - updwn_angle;
     // 差が1deg以下の時は制御しない
-    if (abs(error_angle) < 0.3) {
+    if (error_angle > 0 && abs(error_angle) < 0.1) {
+      updwn_cmd = 0;
+      auto_updwn_flag = false;
+    } else if (error_angle < 0 && abs(error_angle) < 1.5) {
       updwn_cmd = 0;
       auto_updwn_flag = false;
     } else {
@@ -169,11 +172,11 @@ void loop() {
   }
 
   if (rollr_cmd == 1) {
-    rollr_trgt = 145 + rollr_spd_cmd * 5; // 32-33deg
+    rollr_trgt = 135 + rollr_spd_cmd * 5; // 32-33deg
   } else if (rollr_cmd == 2) {
-    rollr_trgt = 205 + rollr_spd_cmd * 5; // 38deg
+    rollr_trgt = 185 + rollr_spd_cmd * 5; // 38deg
   } else if (rollr_cmd == 3) {
-    rollr_trgt = 263 + rollr_spd_cmd * 5;
+    rollr_trgt = 250 + rollr_spd_cmd * 5;
   } else {
     rollr_trgt = 0;
   }
@@ -254,18 +257,19 @@ void Core0b(void *args) {
 
 void Core1b(void *args) {
   while (1) {
-    // rollr_rdsc[0] を data[0], data[1]
+    // 上ローラの角速度[rad/s] rollr_rdsc[0] を data[0], data[1]
     data[0] = (uint8_t)(rollr_rdsc[0] >> 8) & 0xff; // 上位8bit
     data[1] = (uint8_t)rollr_rdsc[0] & 0xff; // 下位8bit
-    // rollr_rdsc[1] を data[2], data[3]
+    // 下ローラの角速度[rad/s] rollr_rdsc[1] を data[2], data[3]
     data[2] = (uint8_t)(rollr_rdsc[1] >> 8) & 0xff; // 上位8bit
     data[3] = (uint8_t)rollr_rdsc[1] & 0xff; // 下位8bit
-    // updwn_angle 
+    // 昇降角度[deg] updwn_angle (0~255) 0 ~ 40[deg]までしか使ってない
     data[4] = (uint8_t)updwn_angle;
-    // LIMIT_PIN
+    // リミットスイッチ LIMIT_PIN(0:OFF, 1:ON)
     data[5] = (uint8_t)digitalRead(LIMIT_PIN);
-    // updwn_rdsc
-    data[8] = (uint8_t)updwn_rdsc & 0xff; // 下位8bit
+    // 昇降機構の角速度[rad/s] updwn_rdsc
+    data[8] = (uint8_t)updwn_rdsc & 0xff; // 下位8bit (0~255)
+    // 微分周期[ms]
     data[12] = (uint8_t)dt;
     esp_now_send(monitor_mac_addr, data, sizeof(data)); // データを送信
 
